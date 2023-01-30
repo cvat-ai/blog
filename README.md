@@ -1,0 +1,2 @@
+# blog
+CVAT.ai blog
