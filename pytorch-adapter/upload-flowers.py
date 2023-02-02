@@ -27,6 +27,7 @@ SUBSETS = ("test", "train", "validation")
 
 @contextlib.contextmanager
 def long_action(description: str) -> Iterator[None]:
+    """Helper function to print "Doing something... done" messages."""
     print(description + "...", end='', flush=True)
     try:
         yield
@@ -37,6 +38,9 @@ def long_action(description: str) -> Iterator[None]:
 
 
 def create_tasks(ds_root: Path, client: Client) -> None:
+    # First we'll create a project to hold the common set of labels for
+    # our dataset. To determine the label names, just get the subdirectory
+    # names in one of the subset directories.
     label_names = [dir.name for dir in (ds_root / SUBSETS[0]).iterdir()]
 
     with long_action("Creating project"):
@@ -49,14 +53,14 @@ def create_tasks(ds_root: Path, client: Client) -> None:
 
     print("  project ID:", project.id)
 
+    # Now that the project has been created, determine the internal ID
+    # for each label. We will need this information to create annotations.
     label_name_to_id = {label.name: label.id for label in project.labels}
 
+    # Now we'll create one task for each subset.
     for subset in SUBSETS:
+        # Get the images that belong to this subset.
         image_paths = list((ds_root / subset).glob("*/*.jpg"))
-        image_name_to_id = {
-            image_path.name: label_name_to_id[image_path.parent.name]
-            for image_path in image_paths
-        }
 
         with long_action(f"Creating task for the {subset} subset"):
             task = client.tasks.create_from_data(
@@ -71,10 +75,21 @@ def create_tasks(ds_root: Path, client: Client) -> None:
 
         print("  task ID:", task.id)
 
+        # Now determine the label ID corresponding to each image.
+        # The parent directory of each image is named after the label,
+        # so look that name up in `label_name_to_id`.
+        image_name_to_id = {
+            image_path.name: label_name_to_id[image_path.parent.name]
+            for image_path in image_paths
+        }
+
         with long_action(f"Uploading annotations for the {subset} subset"):
             task.update_annotations(
                 models.PatchedLabeledDataRequest(
                     tags=[
+                        # Each annotation must be associated with a frame index.
+                        # We don't know in advance which frame will have which index,
+                        # so we query `task.get_frames_info()` to find out.
                         models.LabeledImageRequest(
                             frame=frame_index,
                             label_id=image_name_to_id[frame.name],
@@ -97,11 +112,32 @@ def main():
                     open(flowers_zip_path, "wb") as flowers_zip_file:
                 shutil.copyfileobj(response, flowers_zip_file)
 
+        # The SDK can only upload images from files on the system,
+        # so we'll have to unpack the archive.
         with long_action("Unpacking dataset"):
             shutil.unpack_archive(flowers_zip_path, tmp_dir)
 
+        # The structure of the archive is as follows:
+        # flowers/
+        #   flower_photos/
+        #     test/
+        #       daisy/
+        #         134409839_71069a95d1_m.jpg
+        #         ...
+        #       dandelion/
+        #         ...
+        #       ...
+        #     train/
+        #       ...
+        #     validation/
+        #       ...
+        #
+        # Since everything is inside `flowers/flower_photos`, use
+        # that directory as the root.
         ds_root = tmp_dir / "flowers/flower_photos"
 
+        # `make_client`` establishes a connection to the server
+        # with the given credentials.
         with make_client(
             os.getenv("CVAT_HOST", "app.cvat.ai"),
             credentials=(os.getenv("CVAT_USER"), os.getenv("CVAT_PASS")),
