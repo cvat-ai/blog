@@ -5,21 +5,22 @@
 # SPDX-License-Identifier: MIT
 
 """
-This script uploads the Flowers dataset to CVAT.
-To use it, download flowers.zip from <https://doi.org/10.7910/DVN/1ECTVN>
-and run `./upload-flowers.py <path to flowers.zip>`.
+This script downloads the Flowers dataset from <https://doi.org/10.7910/DVN/1ECTVN>
+and uploads it to CVAT.
 """
 
-import argparse
 import os
 import shutil
 import tempfile
+import urllib.request
 from pathlib import Path
 
 from cvat_sdk import make_client, Client
 from cvat_sdk.core.proxies.tasks import ResourceType
 import cvat_sdk.models as models
 
+
+DATASET_URL = "https://dataverse.harvard.edu/api/access/datafile/4105627"
 SUBSETS = ("test", "train", "validation")
 
 
@@ -77,13 +78,20 @@ def create_tasks(ds_root: Path, client: Client) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("flowers_zip", type=Path)
-    args = parser.parse_args()
-
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
-        shutil.unpack_archive(args.flowers_zip, tmp_dir)
+        flowers_zip_path = tmp_dir / "flowers.zip"
+
+        print("Downloading dataset...")
+        request = urllib.request.Request(DATASET_URL,
+            # dataverse.harvard.edu blocks requests with the default urllib User-Agent
+            headers={'User-Agent': 'upload-flowers'})
+        with urllib.request.urlopen(request) as response, \
+                open(flowers_zip_path, "wb") as flowers_zip_file:
+            shutil.copyfileobj(response, flowers_zip_file)
+
+        print("Unpacking dataset...")
+        shutil.unpack_archive(flowers_zip_path, tmp_dir)
         ds_root = tmp_dir / "flowers/flower_photos"
 
         with make_client(
