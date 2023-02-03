@@ -56,7 +56,17 @@ def run_training(
 
     logging.info('Created data loader')
 
-    net = models.resnet34(num_classes=num_classes)
+    # We'll reuse pretrained weights from ImageNet and train only
+    # the last layer. That way, we can get better quality results faster.
+    net = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
+
+    # Freeze all layers
+    for param in net.parameters():
+        param.requires_grad = False
+
+    # Replace last layer
+    net.fc = nn.Linear(net.fc.in_features, num_classes)
+
     net.train()
 
     criterion = nn.CrossEntropyLoss()
