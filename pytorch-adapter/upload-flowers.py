@@ -68,7 +68,7 @@ def create_tasks(ds_root: Path, client: Client, fraction: float) -> None:
 
             # Keep only a fraction of these images
             num_to_keep = round(len(images_for_label) * fraction)
-            images_for_label = images_for_label[:num_to_keep]
+            images_for_label = sorted(images_for_label)[:num_to_keep]
 
             image_paths += images_for_label
 
