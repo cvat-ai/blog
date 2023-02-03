@@ -6,9 +6,10 @@
 
 """
 This script downloads the Flowers dataset from <https://doi.org/10.7910/DVN/1ECTVN>
-and uploads it to CVAT.
+and uploads a fraction of it to CVAT.
 """
 
+import argparse
 import contextlib
 import os
 import shutil
@@ -37,7 +38,7 @@ def long_action(description: str) -> Iterator[None]:
     print(" done")
 
 
-def create_tasks(ds_root: Path, client: Client) -> None:
+def create_tasks(ds_root: Path, client: Client, fraction: float) -> None:
     # First we'll create a project to hold the common set of labels for
     # our dataset. To determine the label names, just get the subdirectory
     # names in one of the subset directories.
@@ -60,7 +61,16 @@ def create_tasks(ds_root: Path, client: Client) -> None:
     # Now we'll create one task for each subset.
     for subset in SUBSETS:
         # Get the images that belong to this subset.
-        image_paths = list((ds_root / subset).glob("*/*.jpg"))
+        image_paths = []
+        for label_name in label_names:
+            # Get all images with this label
+            images_for_label = list((ds_root / subset / label_name).glob("*.jpg"))
+
+            # Keep only a fraction of these images
+            num_to_keep = round(len(images_for_label) * fraction)
+            images_for_label = images_for_label[:num_to_keep]
+
+            image_paths += images_for_label
 
         with long_action(f"Creating task for the {subset} subset"):
             task = client.tasks.create_from_data(
@@ -100,6 +110,11 @@ def create_tasks(ds_root: Path, client: Client) -> None:
             )
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fraction', type=float, default=0.1,
+        help="Fraction of the dataset to upload")
+    args = parser.parse_args()
+
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
         flowers_zip_path = tmp_dir / "flowers.zip"
@@ -142,7 +157,7 @@ def main():
             os.getenv("CVAT_HOST", "app.cvat.ai"),
             credentials=(os.getenv("CVAT_USER"), os.getenv("CVAT_PASS")),
         ) as client:
-            create_tasks(ds_root, client)
+            create_tasks(ds_root, client, args.fraction)
 
 
 if __name__ == "__main__":
