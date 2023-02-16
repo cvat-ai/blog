@@ -1,5 +1,5 @@
 This directory contains the example scripts referenced by the article
-"PyTorch adapter in the CVAT SDK".
+["CVAT SDK PyTorch adapter: using CVAT datasets in your ML pipeline"](https://www.cvat.ai/post/cvat-sdk-pytorch-adapter).
 
 Each script uses the following environment variables to locate and connect to CVAT:
 
